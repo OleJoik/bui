@@ -1,6 +1,6 @@
 # bui
 
-A tiny reactive UI demo for Neovim, packaged as a standard plugin.
+A tiny reactive UI demo for Neovim.
 
 ## Install (Neovim 0.12+ builtin package manager)
 
@@ -8,6 +8,8 @@ A tiny reactive UI demo for Neovim, packaged as a standard plugin.
 vim.pack.add({
   { src = "https://github.com/<you>/bui" },
 })
+
+require("bui").setup()
 ```
 
 Then open it with:
@@ -18,7 +20,6 @@ Then open it with:
 
 ## Layout
 
-- `plugin/bui.lua`: plugin entrypoint loaded by Neovim.
 - `lua/bui/init.lua`: module implementation and public API.
 
 ## API
