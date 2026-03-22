@@ -383,38 +383,38 @@ end
 function Renderer:render_row(node, ctx)
   local children = node.children or {}
   local gap = node.props.gap or 1
+  local wrap_gap = node.props.wrap_gap or gap
 
   local win_width = self:get_width()
   local container_width = ctx.available_width or win_width
-  local total_gap = math.max(0, (#children - 1) * gap)
-  local available_width = math.max(0, container_width - total_gap)
 
   local child_spans = {}
-  local total_span = 0
   for i, child in ipairs(children) do
-    local span = resolve_span(child.props, container_width)
-    child_spans[i] = span
-    if span then
-      total_span = total_span + span
-    end
+    child_spans[i] = resolve_span(child.props, container_width)
   end
 
-  local child_constraints = {}
-  if total_span > 0 then
+  local function render_row_segment(indices)
+    local total_gap = math.max(0, (#indices - 1) * gap)
+    local available_width = math.max(0, container_width - total_gap)
+    local total_span = 0
+    for _, index in ipairs(indices) do
+      total_span = total_span + (child_spans[index] or 12)
+    end
+
+    local child_constraints = {}
     local span_parts = {}
     local consumed = 0
 
-    for i, span in ipairs(child_spans) do
-      if span then
-        local raw = available_width * span / 12
-        local base = math.floor(raw)
-        child_constraints[i] = base
-        consumed = consumed + base
-        table.insert(span_parts, {
-          index = i,
-          frac = raw - base,
-        })
-      end
+    for _, index in ipairs(indices) do
+      local span = child_spans[index] or 12
+      local raw = available_width * span / total_span
+      local base = math.floor(raw)
+      child_constraints[index] = base
+      consumed = consumed + base
+      table.insert(span_parts, {
+        index = index,
+        frac = raw - base,
+      })
     end
 
     table.sort(span_parts, function(a, b)
@@ -429,56 +429,98 @@ function Renderer:render_row(node, ctx)
       local index = span_parts[i].index
       child_constraints[index] = child_constraints[index] + 1
     end
-  end
 
-  local child_boxes = {}
-  local height = 0
+    local child_boxes = {}
+    local height = 0
 
-  for i, child in ipairs(children) do
-    local prev_available_width = ctx.available_width
-    ctx.available_width = child_constraints[i]
+    for _, index in ipairs(indices) do
+      local child = children[index]
+      local prev_available_width = ctx.available_width
+      ctx.available_width = child_constraints[index]
 
-    local box = self:render_node(child, ctx)
+      local box = self:render_node(child, ctx)
 
-    ctx.available_width = prev_available_width
+      ctx.available_width = prev_available_width
 
-    table.insert(child_boxes, box)
-    height = math.max(height, box.height)
-  end
-
-  local padded_children = {}
-  for _, box in ipairs(child_boxes) do
-    local padded_lines = {}
-    for i = 1, height do
-      padded_lines[i] = pad_right(box.lines[i] or blank_line(box.width), box.width)
+      table.insert(child_boxes, box)
+      height = math.max(height, box.height)
     end
-    table.insert(padded_children, {
-      width = box.width,
-      height = height,
-      lines = padded_lines,
-      focusables = box.focusables,
-    })
+
+    local padded_children = {}
+    for _, box in ipairs(child_boxes) do
+      local padded_lines = {}
+      for i = 1, height do
+        padded_lines[i] = pad_right(box.lines[i] or blank_line(box.width), box.width)
+      end
+      table.insert(padded_children, {
+        width = box.width,
+        height = height,
+        lines = padded_lines,
+        focusables = box.focusables,
+      })
+    end
+
+    local lines = {}
+    for row = 1, height do
+      local parts = {}
+      for i, box in ipairs(padded_children) do
+        table.insert(parts, box.lines[row])
+        if i < #padded_children then
+          table.insert(parts, blank_line(gap))
+        end
+      end
+      table.insert(lines, table.concat(parts))
+    end
+
+    local focusables = {}
+    local col_offset = 0
+    for i, box in ipairs(padded_children) do
+      extend(focusables, shift_focusables(box.focusables, 0, col_offset))
+      col_offset = col_offset + box.width
+      if i < #padded_children then
+        col_offset = col_offset + gap
+      end
+    end
+
+    return make_box(lines, focusables)
+  end
+
+  local segments = {}
+  local segment = {}
+  local segment_span = 0
+
+  for i = 1, #children do
+    local span = child_spans[i] or 12
+    if #segment > 0 and segment_span + span > 12 then
+      table.insert(segments, segment)
+      segment = {}
+      segment_span = 0
+    end
+
+    table.insert(segment, i)
+    segment_span = segment_span + span
+  end
+
+  if #segment > 0 then
+    table.insert(segments, segment)
   end
 
   local lines = {}
-  for row = 1, height do
-    local parts = {}
-    for i, box in ipairs(padded_children) do
-      table.insert(parts, box.lines[row])
-      if i < #padded_children then
-        table.insert(parts, blank_line(gap))
-      end
-    end
-    table.insert(lines, table.concat(parts))
-  end
-
   local focusables = {}
-  local col_offset = 0
-  for i, box in ipairs(padded_children) do
-    extend(focusables, shift_focusables(box.focusables, 0, col_offset))
-    col_offset = col_offset + box.width
-    if i < #padded_children then
-      col_offset = col_offset + gap
+  local row_offset = 0
+
+  for s, indices in ipairs(segments) do
+    local box = render_row_segment(indices)
+
+    extend(lines, box.lines)
+    extend(focusables, shift_focusables(box.focusables, row_offset, 0))
+    row_offset = row_offset + box.height
+
+    if s < #segments then
+      for _ = 1, wrap_gap do
+        table.insert(lines, blank_line(box.width))
+      end
+      row_offset = row_offset + wrap_gap
     end
   end
 
