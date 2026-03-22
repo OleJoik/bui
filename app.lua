@@ -13,6 +13,8 @@ local last_name = Signal.new("Lovelace")
 local email = Signal.new("ada@example.com")
 local city = Signal.new("London")
 local company = Signal.new("Analytical Engines Ltd")
+local status = Signal.new("Focus a text row and press <CR> to trigger on_keymap.")
+local status_count = Signal.new(0)
 
 local element_gap = 0
 local input_padding = 0
@@ -24,6 +26,30 @@ local function App()
     }),
     Text({
       text = "Resize the window: rows collapse to single-column on narrow widths, then expand via width_sm (6/6 and 8/4).",
+    }),
+    Text({
+      text = function()
+        return string.format(
+          "Action row (%d): press <CR> or `gr` here to fire text keymaps.",
+          status_count:get()
+        )
+      end,
+      on_keymap = {
+        ["<CR>"] = function()
+          local next_count = status_count:get() + 1
+          status_count:set(next_count)
+          status:set(string.format("Text <CR> keymap fired %d times.", next_count))
+        end,
+        ["gr"] = function()
+          status:set("Custom text keymap `gr` fired on focused text.")
+        end,
+      },
+    }),
+    Text({
+      text = function()
+        return "Status: " .. status:get()
+      end,
+      focusable = true,
     }),
 
     Row({
@@ -56,6 +82,11 @@ local function App()
           return email:get()
         end,
         on_edit = live_signal_editor("Email", email),
+        on_keymap = {
+          ["gr"] = function(_, item)
+            status:set("Custom input keymap `gr` fired on " .. item.label .. ".")
+          end,
+        },
       }),
       Column({
         Input({
