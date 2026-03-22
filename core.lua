@@ -1019,7 +1019,7 @@ local function open_live_input(opts)
     if vim.api.nvim_win_is_valid(input_win) then
       vim.api.nvim_set_current_win(input_win)
       vim.api.nvim_win_set_cursor(input_win, { 1, #value })
-      vim.cmd("startinsert!")
+      vim.cmd("startinsert")
     end
   end)
 
