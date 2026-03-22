@@ -774,17 +774,23 @@ function Renderer:render_select(node, ctx)
 
   local selected_index = resolve_selected_index(options, value)
   local selected_label = selected_index and options[selected_index].label or "No options"
-  local shown = selected_label .. " ▾"
+  local icon = "▾"
 
-  local intrinsic_width = math.max(24, strw(label) + 6, strw(shown) + 4)
+  local intrinsic_width = math.max(24, strw(label) + 6, strw(selected_label) + 6)
   local width = props.width or intrinsic_width
   if ctx.available_width then
     width = math.max(10, ctx.available_width)
   end
 
+  local inner_width = math.max(1, width - 2)
+  local label_max = math.max(1, inner_width - strw(icon) - 2)
+  local shown_label = preview_text(selected_label, label_max)
+  local left_text = " " .. shown_label
+  local spacer = math.max(1, inner_width - strw(left_text) - strw(icon))
+
   local top_fill = math.max(0, width - strw(label) - 5)
   local top = "┌─ " .. label .. " " .. string.rep("─", top_fill) .. "┐"
-  local mid = "│" .. pad_right(" " .. shown, width - 2) .. "│"
+  local mid = "│" .. left_text .. string.rep(" ", spacer) .. icon .. "│"
   local bot = "└" .. string.rep("─", width - 2) .. "┘"
 
   local my_focus_index = ctx.next_focus_index
