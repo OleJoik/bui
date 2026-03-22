@@ -120,6 +120,8 @@ local function shift_focusables(focusables, row_delta, col_delta)
     table.insert(shifted, {
       focused = item.focused,
       on_edit = item.on_edit,
+      label = item.label,
+      width = item.width,
 
       line_start = item.line_start + row_delta,
       line_end = item.line_end + row_delta,
@@ -136,6 +138,7 @@ local function shift_focusables(focusables, row_delta, col_delta)
 
   return shifted
 end
+
 local function make_box(lines, focusables)
   local width = 0
   for _, line in ipairs(lines) do
@@ -153,6 +156,43 @@ local function make_box(lines, focusables)
     lines = normalized,
     focusables = focusables or {},
   }
+end
+
+local function preview_text(text, max_chars)
+  text = tostring(text or "")
+  max_chars = math.max(0, tonumber(max_chars) or 0)
+
+  local chars = vim.fn.strchars(text)
+  if chars <= max_chars then
+    return text
+  end
+
+  if max_chars <= 0 then
+    return ""
+  end
+
+  if max_chars == 1 then
+    return "…"
+  end
+
+  return vim.fn.strcharpart(text, 0, max_chars - 1) .. "…"
+end
+
+local function make_input_lines(label, value, width, opts)
+  label = tostring(label or "")
+  value = tostring(value or "")
+  width = tonumber(width) or 24
+  opts = opts or {}
+
+  local inner_width = width - 4
+  local shown_value = opts.truncate and preview_text(value, inner_width) or value
+
+  local top_fill = math.max(0, width - strw(label) - 5)
+  local top = "┌─ " .. label .. " " .. string.rep("─", top_fill) .. "┐"
+  local mid = "│ " .. pad_right(shown_value, inner_width) .. " │"
+  local bot = "└" .. string.rep("─", width - 2) .. "┘"
+
+  return { top, mid, bot }
 end
 
 -- ============================================================
@@ -192,13 +232,10 @@ function Renderer:render_input(node, ctx)
   end
   value = tostring(value or "")
 
-  local width = props.width or 24
-  width = math.max(width, strw(label) + 6, strw(value) + 4)
+  local width = props.width or math.max(24, strw(label) + 6, strw(value) + 4)
 
-  local top_fill = math.max(0, width - strw(label) - 5)
-  local top = "┌─ " .. label .. " " .. string.rep("─", top_fill) .. "┐"
-  local mid = "│ " .. pad_right(value, width - 4) .. " │"
-  local bot = "└" .. string.rep("─", width - 2) .. "┘"
+  local lines = make_input_lines(label, value, width, { truncate = true })
+  local top, mid, bot = lines[1], lines[2], lines[3]
 
   local my_focus_index = ctx.next_focus_index
   local focused = my_focus_index == ctx.focus_index
@@ -208,6 +245,8 @@ function Renderer:render_input(node, ctx)
     {
       focused = focused,
       on_edit = props.on_edit,
+      label = label,
+      width = width,
 
       line_start = 0,
       line_end = 2,
@@ -221,6 +260,7 @@ function Renderer:render_input(node, ctx)
       right = width - 1,
     },
   }
+
   return make_box({ top, mid, bot }, focusables)
 end
 
@@ -369,7 +409,6 @@ function Renderer:move_cursor_to_focus(index)
 
   local line = vim.api.nvim_buf_get_lines(self.bufnr, row0, row0 + 1, false)[1] or ""
 
-  -- nvim_win_set_cursor expects a byte column, not a display/character column.
   local byte_col = vim.fn.byteidx(line, char_col)
   if byte_col < 0 then
     byte_col = #line
@@ -496,6 +535,231 @@ local function find_next_focus(renderer, current_index, direction)
 end
 
 -- ============================================================
+-- Floating live editor
+-- ============================================================
+
+local function open_live_input(opts)
+  local anchor_item = opts.anchor_item
+  local title = tostring((anchor_item and anchor_item.label) or opts.title or "Edit")
+  local initial = tostring(opts.initial or "")
+  local parent_win = opts.parent_win
+  local on_change = opts.on_change
+  local on_submit = opts.on_submit
+  local on_cancel = opts.on_cancel
+  local on_close = opts.on_close
+
+  local width = assert(anchor_item.width, "anchor_item.width is required")
+  local inner_width = width - 4
+
+  local border_buf = vim.api.nvim_create_buf(false, true)
+  local input_buf = vim.api.nvim_create_buf(false, true)
+
+  vim.bo[border_buf].buftype = "nofile"
+  vim.bo[border_buf].bufhidden = "wipe"
+  vim.bo[border_buf].swapfile = false
+  vim.bo[border_buf].modifiable = false
+  vim.bo[border_buf].filetype = "mini_react_ui_input_border"
+
+  vim.bo[input_buf].buftype = "nofile"
+  vim.bo[input_buf].bufhidden = "wipe"
+  vim.bo[input_buf].swapfile = false
+  vim.bo[input_buf].modifiable = true
+  vim.bo[input_buf].readonly = false
+  vim.bo[input_buf].filetype = "mini_react_ui_input"
+
+  local value = initial
+  local original = initial
+  local closed = false
+  local syncing = false
+
+  local border_ns = vim.api.nvim_create_namespace("mini_react_ui_input_border_" .. border_buf)
+
+  local function render_border()
+    local lines = make_input_lines(title, value, width, { truncate = true })
+
+    vim.bo[border_buf].modifiable = true
+    vim.api.nvim_buf_set_lines(border_buf, 0, -1, false, lines)
+    vim.bo[border_buf].modifiable = false
+
+    vim.api.nvim_buf_clear_namespace(border_buf, border_ns, 0, -1)
+    vim.api.nvim_buf_add_highlight(border_buf, border_ns, "MiniReactInputEditingBorder", 0, 0, -1)
+    vim.api.nvim_buf_add_highlight(border_buf, border_ns, "MiniReactInputEditingBorder", 2, 0, -1)
+    vim.api.nvim_buf_add_highlight(border_buf, border_ns, "MiniReactInputEditingBorder", 1, 0, 2)
+    vim.api.nvim_buf_add_highlight(border_buf, border_ns, "MiniReactInputEditingBorder", 1, width - 2, width)
+  end
+
+  vim.api.nvim_buf_set_lines(input_buf, 0, -1, false, { value })
+
+  local border_win = vim.api.nvim_open_win(border_buf, false, {
+    relative = "win",
+    win = parent_win,
+    row = anchor_item.top,
+    col = anchor_item.left,
+    width = width,
+    height = 3,
+    border = "none",
+    style = "minimal",
+    focusable = false,
+    zindex = 60,
+    noautocmd = true,
+  })
+
+  local input_win = vim.api.nvim_open_win(input_buf, true, {
+    relative = "win",
+    win = parent_win,
+    row = anchor_item.top + 1,
+    col = anchor_item.left + 2,
+    width = inner_width,
+    height = 1,
+    border = "none",
+    style = "minimal",
+    focusable = true,
+    zindex = 61,
+    noautocmd = true,
+  })
+
+  vim.wo[border_win].number = false
+  vim.wo[border_win].relativenumber = false
+  vim.wo[border_win].cursorline = false
+  vim.wo[border_win].wrap = false
+  vim.wo[border_win].signcolumn = "no"
+  vim.wo[border_win].foldcolumn = "0"
+  vim.wo[border_win].spell = false
+  vim.wo[border_win].list = false
+
+  vim.wo[input_win].number = false
+  vim.wo[input_win].relativenumber = false
+  vim.wo[input_win].cursorline = false
+  vim.wo[input_win].wrap = false
+  vim.wo[input_win].signcolumn = "no"
+  vim.wo[input_win].foldcolumn = "0"
+  vim.wo[input_win].spell = false
+  vim.wo[input_win].list = false
+  vim.wo[input_win].winhighlight = "Normal:MiniReactInputEditingText,NormalNC:MiniReactInputEditingText"
+
+  local function get_input_value()
+    return vim.api.nvim_buf_get_lines(input_buf, 0, 1, false)[1] or ""
+  end
+
+  local function set_input_value(new_value)
+    new_value = tostring(new_value or "")
+    vim.api.nvim_buf_set_lines(input_buf, 0, -1, false, { new_value })
+    value = new_value
+  end
+
+  local function close()
+    if closed then
+      return
+    end
+    closed = true
+
+    if vim.api.nvim_win_is_valid(input_win) then
+      vim.api.nvim_win_close(input_win, true)
+    end
+    if vim.api.nvim_win_is_valid(border_win) then
+      vim.api.nvim_win_close(border_win, true)
+    end
+
+    if on_close then
+      vim.schedule(on_close)
+    end
+  end
+
+  local function sync_from_input()
+    if closed or syncing then
+      return
+    end
+
+    syncing = true
+    value = get_input_value()
+    render_border()
+
+    if on_change then
+      on_change(value)
+    end
+
+    syncing = false
+  end
+
+  render_border()
+
+  vim.api.nvim_create_autocmd({ "TextChangedI", "TextChanged" }, {
+    buffer = input_buf,
+    callback = sync_from_input,
+  })
+
+  vim.keymap.set("i", "<CR>", function()
+    vim.cmd("stopinsert")
+    value = get_input_value()
+    if on_submit then
+      on_submit(value)
+    end
+    close()
+  end, { buffer = input_buf, silent = true })
+
+  vim.keymap.set("n", "<CR>", function()
+    value = get_input_value()
+    if on_submit then
+      on_submit(value)
+    end
+    close()
+  end, { buffer = input_buf, silent = true })
+
+  vim.keymap.set({ "i", "n" }, "<Esc>", function()
+    vim.cmd("stopinsert")
+    set_input_value(original)
+    render_border()
+
+    if on_cancel then
+      on_cancel()
+    end
+    close()
+  end, { buffer = input_buf, silent = true })
+
+  vim.schedule(function()
+    if vim.api.nvim_win_is_valid(input_win) then
+      vim.api.nvim_set_current_win(input_win)
+      vim.api.nvim_win_set_cursor(input_win, { 1, #value })
+      vim.cmd("startinsert!")
+    end
+  end)
+
+  return {
+    border_buf = border_buf,
+    border_win = border_win,
+    input_buf = input_buf,
+    input_win = input_win,
+  }
+end
+
+local function live_signal_editor(label, signal)
+  return function(parent_win, item, on_done)
+    local original = signal:get()
+
+    open_live_input({
+      title = label,
+      initial = original,
+      parent_win = parent_win,
+      anchor_item = item,
+      on_change = function(v)
+        signal:set(v)
+      end,
+      on_submit = function(v)
+        signal:set(v)
+      end,
+      on_cancel = function()
+        signal:set(original)
+      end,
+      on_close = function()
+        if on_done then
+          on_done()
+        end
+      end,
+    })
+  end
+end
+
+-- ============================================================
 -- App state
 -- ============================================================
 
@@ -523,9 +787,7 @@ local function App()
         value = function()
           return first_name:get()
         end,
-        on_edit = function()
-          first_name:set(vim.fn.input("First name: ", first_name:get()))
-        end,
+        on_edit = live_signal_editor("First name", first_name),
       }),
       Input({
         label = "Last name",
@@ -533,9 +795,7 @@ local function App()
         value = function()
           return last_name:get()
         end,
-        on_edit = function()
-          last_name:set(vim.fn.input("Last name: ", last_name:get()))
-        end,
+        on_edit = live_signal_editor("Last name", last_name),
       }),
     }, { gap = 2 }),
 
@@ -546,9 +806,7 @@ local function App()
         value = function()
           return email:get()
         end,
-        on_edit = function()
-          email:set(vim.fn.input("Email: ", email:get()))
-        end,
+        on_edit = live_signal_editor("Email", email),
       }),
       Column({
         Input({
@@ -557,9 +815,7 @@ local function App()
           value = function()
             return city:get()
           end,
-          on_edit = function()
-            city:set(vim.fn.input("City: ", city:get()))
-          end,
+          on_edit = live_signal_editor("City", city),
         }),
         Input({
           label = "Company",
@@ -567,9 +823,7 @@ local function App()
           value = function()
             return company:get()
           end,
-          on_edit = function()
-            company:set(vim.fn.input("Company: ", company:get()))
-          end,
+          on_edit = live_signal_editor("Company", company),
         }),
       }, { gap = 1 }),
     }, { gap = 2 }),
@@ -577,11 +831,12 @@ local function App()
     Text({
       text = function()
         return string.format(
-          "Summary: %s %s <%s> from %s",
+          "Summary: %s %s <%s> from %s at %s",
           first_name:get(),
           last_name:get(),
           email:get(),
-          city:get()
+          city:get(),
+          company:get()
         )
       end,
     }),
@@ -600,6 +855,16 @@ local function setup_highlights()
   vim.api.nvim_set_hl(0, "MiniReactInputFocused", {
     fg = "#ff9e64",
     bold = true,
+  })
+
+  vim.api.nvim_set_hl(0, "MiniReactInputEditingBorder", {
+    fg = "#7aa2f7",
+    bold = true,
+  })
+
+  vim.api.nvim_set_hl(0, "MiniReactInputEditingText", {
+    fg = "#ffffff",
+    bg = "#283457",
   })
 end
 
@@ -631,9 +896,17 @@ end
 
 local function edit_focused(renderer)
   local item = renderer:get_focused_item(focus_index:get())
-  if item and item.on_edit then
-    item.on_edit()
+  if not item or not item.on_edit then
+    return
   end
+
+  item.on_edit(renderer.winid, item, function()
+    if vim.api.nvim_win_is_valid(renderer.winid) then
+      vim.api.nvim_set_current_win(renderer.winid)
+      vim.cmd("stopinsert")
+      renderer:move_cursor_to_focus(focus_index:get())
+    end
+  end)
 end
 
 local function mount()
@@ -648,6 +921,12 @@ local function mount()
   vim.bo[buf].swapfile = false
   vim.bo[buf].modifiable = false
   vim.bo[buf].filetype = "mini_react_ui"
+
+  vim.wo[win].number = false
+  vim.wo[win].relativenumber = false
+  vim.wo[win].wrap = false
+  vim.wo[win].signcolumn = "no"
+  vim.wo[win].cursorline = false
 
   local renderer = Renderer.new(buf, win, 80)
 
