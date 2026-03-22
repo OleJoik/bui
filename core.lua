@@ -224,6 +224,13 @@ function Renderer.new(bufnr, winid, width)
   }, Renderer)
 end
 
+function Renderer:get_width()
+  if vim.api.nvim_win_is_valid(self.winid) then
+    return vim.api.nvim_win_get_width(self.winid)
+  end
+  return self.width or 80
+end
+
 function Renderer:render_text(node, _ctx)
   local text = node.props.text
   if type(text) == "function" then
@@ -437,10 +444,17 @@ function Renderer:render(root, focus_index)
   }
 
   local box = self:render_node(root, ctx)
+  local target_width = math.max(box.width, self:get_width())
+
+  local full_width_lines = {}
+  for i, line in ipairs(box.lines) do
+    full_width_lines[i] = pad_right(line, target_width)
+  end
+
   self.focusables = box.focusables
 
   vim.bo[self.bufnr].modifiable = true
-  vim.api.nvim_buf_set_lines(self.bufnr, 0, -1, false, box.lines)
+  vim.api.nvim_buf_set_lines(self.bufnr, 0, -1, false, full_width_lines)
   vim.bo[self.bufnr].modifiable = false
 
   self:apply_highlights()
