@@ -211,10 +211,23 @@ local GRID_BREAKPOINTS = {
   xl = 1280,
 }
 
+local function is_grid_units(value)
+  local n = tonumber(value)
+  if not n then
+    return false
+  end
+
+  if n < 1 or n > 12 then
+    return false
+  end
+
+  return math.floor(n) == n
+end
+
 local function resolve_span(props, container_width)
   props = props or {}
 
-  local span = props.span
+  local span = is_grid_units(props.width) and props.width or props.span
 
   if container_width >= GRID_BREAKPOINTS.xl and props.span_xl ~= nil then
     span = props.span_xl
@@ -230,12 +243,11 @@ local function resolve_span(props, container_width)
     return nil
   end
 
-  span = math.floor(tonumber(span) or 0)
-  if span <= 0 then
+  if not is_grid_units(span) then
     return nil
   end
 
-  return math.min(12, span)
+  return math.floor(span)
 end
 
 
@@ -283,7 +295,15 @@ function Renderer:render_input(node, ctx)
   end
   value = tostring(value or "")
 
-  local width = props.width or math.max(24, strw(label) + 6, strw(value) + 4)
+  local intrinsic_width = math.max(24, strw(label) + 6, strw(value) + 4)
+  local width = props.width
+
+  if ctx.available_width and is_grid_units(width) then
+    width = intrinsic_width
+  end
+
+  width = width or intrinsic_width
+
   if ctx.available_width then
     width = math.max(6, math.min(width, ctx.available_width))
   end

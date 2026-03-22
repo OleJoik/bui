@@ -20,14 +20,13 @@ local function App()
       text = "Profile editor",
     }),
     Text({
-      text = "Resize the window: spans should keep a 12-column layout (6/6 then 8/4).",
+      text = "Resize the window: row children with width=1..12 share a 12-column layout (6/6 then 8/4).",
     }),
 
     Row({
       Input({
         label = "First name",
-        span = 12,
-        span_md = 6,
+        width = 6,
         value = function()
           return first_name:get()
         end,
@@ -35,8 +34,7 @@ local function App()
       }),
       Input({
         label = "Last name",
-        span = 12,
-        span_md = 6,
+        width = 6,
         value = function()
           return last_name:get()
         end,
@@ -47,7 +45,7 @@ local function App()
     Row({
       Input({
         label = "Email",
-        span = 8,
+        width = 8,
         value = function()
           return email:get()
         end,
@@ -72,7 +70,7 @@ local function App()
         }),
       }, {
         gap = 1,
-        span = 4,
+        width = 4,
       }),
     }, { gap = 2 }),
 
