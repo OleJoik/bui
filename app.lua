@@ -19,11 +19,15 @@ local function App()
     Text({
       text = "Profile editor",
     }),
+    Text({
+      text = "Resize the window: spans should keep a 12-column layout (6/6 then 8/4).",
+    }),
 
     Row({
       Input({
         label = "First name",
-        width = 22,
+        span = 12,
+        span_md = 6,
         value = function()
           return first_name:get()
         end,
@@ -31,7 +35,8 @@ local function App()
       }),
       Input({
         label = "Last name",
-        width = 22,
+        span = 12,
+        span_md = 6,
         value = function()
           return last_name:get()
         end,
@@ -42,7 +47,7 @@ local function App()
     Row({
       Input({
         label = "Email",
-        width = 28,
+        span = 8,
         value = function()
           return email:get()
         end,
@@ -65,7 +70,10 @@ local function App()
           end,
           on_edit = live_signal_editor("Company", company),
         }),
-      }, { gap = 1 }),
+      }, {
+        gap = 1,
+        span = 4,
+      }),
     }, { gap = 2 }),
 
     Text({

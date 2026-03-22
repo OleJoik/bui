@@ -204,6 +204,40 @@ local function make_input_lines(label, value, width, opts)
 
   return { top, mid, bot }
 end
+local GRID_BREAKPOINTS = {
+  sm = 640,
+  md = 768,
+  lg = 1024,
+  xl = 1280,
+}
+
+local function resolve_span(props, container_width)
+  props = props or {}
+
+  local span = props.span
+
+  if container_width >= GRID_BREAKPOINTS.xl and props.span_xl ~= nil then
+    span = props.span_xl
+  elseif container_width >= GRID_BREAKPOINTS.lg and props.span_lg ~= nil then
+    span = props.span_lg
+  elseif container_width >= GRID_BREAKPOINTS.md and props.span_md ~= nil then
+    span = props.span_md
+  elseif container_width >= GRID_BREAKPOINTS.sm and props.span_sm ~= nil then
+    span = props.span_sm
+  end
+
+  if span == nil then
+    return nil
+  end
+
+  span = math.floor(tonumber(span) or 0)
+  if span <= 0 then
+    return nil
+  end
+
+  return math.min(12, span)
+end
+
 
 -- ============================================================
 -- Renderer
@@ -250,6 +284,9 @@ function Renderer:render_input(node, ctx)
   value = tostring(value or "")
 
   local width = props.width or math.max(24, strw(label) + 6, strw(value) + 4)
+  if ctx.available_width then
+    width = math.max(6, math.min(width, ctx.available_width))
+  end
 
   local lines = make_input_lines(label, value, width, { truncate = true })
   local top, mid, bot = lines[1], lines[2], lines[3]
@@ -321,11 +358,64 @@ function Renderer:render_row(node, ctx)
   local children = node.children or {}
   local gap = node.props.gap or 1
 
+  local win_width = self:get_width()
+  local container_width = ctx.available_width or win_width
+  local total_gap = math.max(0, (#children - 1) * gap)
+  local available_width = math.max(0, container_width - total_gap)
+
+  local child_spans = {}
+  local total_span = 0
+  for i, child in ipairs(children) do
+    local span = resolve_span(child.props, container_width)
+    child_spans[i] = span
+    if span then
+      total_span = total_span + span
+    end
+  end
+
+  local child_constraints = {}
+  if total_span > 0 then
+    local span_parts = {}
+    local consumed = 0
+
+    for i, span in ipairs(child_spans) do
+      if span then
+        local raw = available_width * span / 12
+        local base = math.floor(raw)
+        child_constraints[i] = base
+        consumed = consumed + base
+        table.insert(span_parts, {
+          index = i,
+          frac = raw - base,
+        })
+      end
+    end
+
+    table.sort(span_parts, function(a, b)
+      if a.frac == b.frac then
+        return a.index < b.index
+      end
+      return a.frac > b.frac
+    end)
+
+    local leftover = math.max(0, math.min(available_width - consumed, #span_parts))
+    for i = 1, leftover do
+      local index = span_parts[i].index
+      child_constraints[index] = child_constraints[index] + 1
+    end
+  end
+
   local child_boxes = {}
   local height = 0
 
-  for _, child in ipairs(children) do
+  for i, child in ipairs(children) do
+    local prev_available_width = ctx.available_width
+    ctx.available_width = child_constraints[i]
+
     local box = self:render_node(child, ctx)
+
+    ctx.available_width = prev_available_width
+
     table.insert(child_boxes, box)
     height = math.max(height, box.height)
   end
@@ -368,6 +458,7 @@ function Renderer:render_row(node, ctx)
 
   return make_box(lines, focusables)
 end
+
 
 function Renderer:render_node(node, ctx)
   if type(node) == "function" then
