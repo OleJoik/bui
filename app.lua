@@ -30,7 +30,7 @@ local function App()
     Text({
       text = function()
         return string.format(
-          "Action row (%d): press <CR> here to fire a text on_enter handler.",
+          "Action row (%d): press <CR> or `gr` here to fire text handlers.",
           status_count:get()
         )
       end,
@@ -39,6 +39,11 @@ local function App()
         status_count:set(next_count)
         status:set(string.format("Text on_enter fired %d times.", next_count))
       end,
+      on_keymap = {
+        ["gr"] = function()
+          status:set("Custom text keymap `gr` fired on focused text.")
+        end,
+      },
     }),
     Text({
       text = function()
@@ -77,6 +82,11 @@ local function App()
           return email:get()
         end,
         on_edit = live_signal_editor("Email", email),
+        on_keymap = {
+          ["gr"] = function(_, item)
+            status:set("Custom input keymap `gr` fired on " .. item.label .. ".")
+          end,
+        },
       }),
       Column({
         Input({
