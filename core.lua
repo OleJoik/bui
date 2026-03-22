@@ -336,6 +336,7 @@ function Renderer:render_input(node, ctx)
       on_edit = props.on_edit,
       label = label,
       width = width,
+      padding = padding,
 
       line_start = 0,
       line_end = 2,
@@ -848,7 +849,8 @@ local function open_live_input(opts)
   local on_close = opts.on_close
 
   local width = assert(anchor_item.width, "anchor_item.width is required")
-  local inner_width = width - 4
+  local padding = math.max(0, math.floor(tonumber(anchor_item.padding) or 0))
+  local inner_width = math.max(1, width - 2 - (padding * 2))
 
   local border_buf = vim.api.nvim_create_buf(false, true)
   local input_buf = vim.api.nvim_create_buf(false, true)
@@ -907,7 +909,7 @@ local function open_live_input(opts)
     relative = "win",
     win = parent_win,
     row = anchor_item.top + 1,
-    col = anchor_item.left + 2,
+    col = anchor_item.left + 1 + padding,
     width = inner_width,
     height = 1,
     border = "none",
