@@ -4,6 +4,7 @@ local Signal = core.Signal
 local Text = core.Text
 local Input = core.Input
 local Button = core.Button
+local Checkbox = core.Checkbox
 local Column = core.Column
 local Row = core.Row
 local Renderer = core.Renderer
@@ -56,17 +57,16 @@ local function App()
     }),
     Row({
       Button({
-        label = "Run action",
+        label = "Save profile",
         on_press = function()
           local next_count = press_count:get() + 1
           press_count:set(next_count)
-          status:set(string.format("Run action pressed %d times.", next_count))
+          status:set(string.format("Save profile pressed %d times.", next_count))
         end,
       }),
-      Button({
+      Checkbox({
         label = "Notifications",
-        toggleable = true,
-        toggled = function()
+        checked = function()
           return notifications_enabled:get()
         end,
         on_toggle = function(next_state)
@@ -80,7 +80,7 @@ local function App()
     Text({
       text = function()
         return string.format(
-          "Buttons: run_count=%d, notifications=%s",
+          "Controls: save_presses=%d, notifications=%s",
           press_count:get(),
           notifications_enabled:get() and "on" or "off"
         )

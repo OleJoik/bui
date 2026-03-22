@@ -74,6 +74,13 @@ local function Button(props)
   }
 end
 
+local function Checkbox(props)
+  return {
+    type = "checkbox",
+    props = props or {},
+  }
+end
+
 local function Column(children, props)
   return {
     type = "column",
@@ -93,6 +100,7 @@ end
 M.Text = Text
 M.Input = Input
 M.Button = Button
+M.Checkbox = Checkbox
 M.Column = Column
 M.Row = Row
 
@@ -436,48 +444,36 @@ end
 
 function Renderer:render_button(node, ctx)
   local props = node.props or {}
-  local label = props.label or props.text or "Button"
+  local label = props.label or props.text or "Click me"
   if type(label) == "function" then
     label = label()
   end
-  label = tostring(label or "Button")
+  label = tostring(label or "Click me")
 
-  local is_toggleable = props.toggleable == true
-  local toggled = props.toggled
-  if type(toggled) == "function" then
-    toggled = toggled()
-  end
-  toggled = toggled == true
-
-  local prefix = is_toggleable and (toggled and "[x] " or "[ ] ") or ""
-  local button_text = "[" .. prefix .. label .. "]"
+  local icon = tostring(props.icon or "󰌵")
+  local content = string.format(" %s %s  ↵ ", icon, label)
+  local inner_width = math.max(1, strw(content))
+  local width = math.max(6, tonumber(props.width) or (inner_width + 2))
+  local top = "┌" .. string.rep("─", width - 2) .. "┐"
+  local mid = "│" .. pad_right(content, width - 2) .. "│"
+  local bot = "└" .. string.rep("─", width - 2) .. "┘"
 
   local my_focus_index = ctx.next_focus_index
   local focused = my_focus_index == ctx.focus_index
   ctx.next_focus_index = ctx.next_focus_index + 1
 
-  local invoke_press = function(winid, item)
+  local on_activate = function(winid, item)
     if type(props.on_press) == "function" then
-      props.on_press(winid, item)
-    end
-  end
-
-  local invoke_toggle = function(winid, item)
-    local next_state = not toggled
-    if type(props.on_toggle) == "function" then
-      props.on_toggle(next_state, winid, item)
-    elseif type(props.on_press) == "function" then
       props.on_press(winid, item)
     end
   end
 
   local on_keymap = {
     ["<CR>"] = function(winid, item)
-      if is_toggleable then
-        invoke_toggle(winid, item)
-      else
-        invoke_press(winid, item)
-      end
+      on_activate(winid, item)
+    end,
+    ["<Space>"] = function(winid, item)
+      on_activate(winid, item)
     end,
   }
 
@@ -487,7 +483,75 @@ function Renderer:render_button(node, ctx)
     end
   end
 
-  local width = strw(button_text)
+  local focusables = {
+    {
+      focused = focused,
+      on_keymap = on_keymap,
+      label = label,
+      width = width,
+
+      line_start = 0,
+      line_end = 2,
+
+      input_row = 1,
+      input_col = 1,
+
+      top = 0,
+      bottom = 2,
+      left = 0,
+      right = math.max(0, width - 1),
+    },
+  }
+
+  return make_box({ top, mid, bot }, focusables)
+end
+
+function Renderer:render_checkbox(node, ctx)
+  local props = node.props or {}
+  local label = props.label or props.text or "Checkbox"
+  if type(label) == "function" then
+    label = label()
+  end
+  label = tostring(label or "Checkbox")
+
+  local checked = props.checked
+  if type(checked) == "function" then
+    checked = checked()
+  end
+  checked = checked == true
+
+  local icon_checked = tostring(props.icon_checked or "󰄱")
+  local icon_unchecked = tostring(props.icon_unchecked or "󰄰")
+  local marker = checked and icon_checked or icon_unchecked
+  local line = string.format("%s  %s", marker, label)
+
+  local my_focus_index = ctx.next_focus_index
+  local focused = my_focus_index == ctx.focus_index
+  ctx.next_focus_index = ctx.next_focus_index + 1
+
+  local on_toggle = function(winid, item)
+    local next_state = not checked
+    if type(props.on_toggle) == "function" then
+      props.on_toggle(next_state, winid, item)
+    end
+  end
+
+  local on_keymap = {
+    ["<CR>"] = function(winid, item)
+      on_toggle(winid, item)
+    end,
+    ["<Space>"] = function(winid, item)
+      on_toggle(winid, item)
+    end,
+  }
+
+  if type(props.on_keymap) == "table" then
+    for lhs, handler in pairs(props.on_keymap) do
+      on_keymap[lhs] = handler
+    end
+  end
+
+  local width = strw(line)
   local focusables = {
     {
       focused = focused,
@@ -508,7 +572,7 @@ function Renderer:render_button(node, ctx)
     },
   }
 
-  return make_box({ button_text }, focusables)
+  return make_box({ line }, focusables)
 end
 
 function Renderer:render_column(node, ctx)
@@ -705,6 +769,8 @@ function Renderer:render_node(node, ctx)
     return self:render_input(node, ctx)
   elseif node.type == "button" then
     return self:render_button(node, ctx)
+  elseif node.type == "checkbox" then
+    return self:render_checkbox(node, ctx)
   elseif node.type == "column" then
     return self:render_column(node, ctx)
   elseif node.type == "row" then
