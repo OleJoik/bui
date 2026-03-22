@@ -205,10 +205,10 @@ local function make_input_lines(label, value, width, opts)
   return { top, mid, bot }
 end
 local GRID_BREAKPOINTS = {
-  sm = 640,
-  md = 768,
-  lg = 1024,
-  xl = 1280,
+  sm = 64,
+  md = 96,
+  lg = 128,
+  xl = 160,
 }
 
 local function is_grid_units(value)
@@ -227,16 +227,28 @@ end
 local function resolve_span(props, container_width)
   props = props or {}
 
-  local span = is_grid_units(props.width) and props.width or props.span
+  local span = nil
+  if is_grid_units(props.width) then
+    span = props.width
+  elseif props.width == nil then
+    span = 12
+  end
 
-  if container_width >= GRID_BREAKPOINTS.xl and props.span_xl ~= nil then
-    span = props.span_xl
-  elseif container_width >= GRID_BREAKPOINTS.lg and props.span_lg ~= nil then
-    span = props.span_lg
-  elseif container_width >= GRID_BREAKPOINTS.md and props.span_md ~= nil then
-    span = props.span_md
-  elseif container_width >= GRID_BREAKPOINTS.sm and props.span_sm ~= nil then
-    span = props.span_sm
+  local width_breakpoints = {
+    xl = props.width_xl,
+    lg = props.width_lg,
+    md = props.width_md,
+    sm = props.width_sm,
+  }
+
+  if container_width >= GRID_BREAKPOINTS.xl then
+    span = width_breakpoints.xl or span
+  elseif container_width >= GRID_BREAKPOINTS.lg then
+    span = width_breakpoints.lg or span
+  elseif container_width >= GRID_BREAKPOINTS.md then
+    span = width_breakpoints.md or span
+  elseif container_width >= GRID_BREAKPOINTS.sm then
+    span = width_breakpoints.sm or span
   end
 
   if span == nil then
