@@ -130,6 +130,7 @@ local function shift_focusables(focusables, row_delta, col_delta)
     table.insert(shifted, {
       focused = item.focused,
       on_edit = item.on_edit,
+      on_enter = item.on_enter,
       label = item.label,
       width = item.width,
 
@@ -330,13 +331,46 @@ function Renderer:get_width()
 end
 
 function Renderer:render_text(node, ctx)
-  local text = node.props.text
+  local props = node.props or {}
+  local text = props.text
   if type(text) == "function" then
     text = text()
   end
   local width = (ctx and ctx.available_width) or self:get_width()
   local lines = wrap_text(text, width)
-  return make_box(lines)
+
+  local focusables = {}
+  local is_focusable = props.focusable or type(props.on_enter) == "function"
+  if is_focusable then
+    local my_focus_index = ctx.next_focus_index
+    local focused = my_focus_index == ctx.focus_index
+    ctx.next_focus_index = ctx.next_focus_index + 1
+
+    local text_width = 0
+    for _, line in ipairs(lines) do
+      text_width = math.max(text_width, strw(line))
+    end
+
+    table.insert(focusables, {
+      focused = focused,
+      on_enter = props.on_enter,
+      label = tostring(text or ""),
+      width = text_width,
+
+      line_start = 0,
+      line_end = #lines - 1,
+
+      input_row = 0,
+      input_col = 0,
+
+      top = 0,
+      bottom = #lines - 1,
+      left = 0,
+      right = math.max(0, text_width - 1),
+    })
+  end
+
+  return make_box(lines, focusables)
 end
 
 function Renderer:render_input(node, ctx)
@@ -823,17 +857,24 @@ M.create_runtime = create_runtime
 
 local function edit_focused(runtime)
   local item = runtime.renderer:get_focused_item(runtime.focus_index)
-  if not item or not item.on_edit then
+  if not item then
     return
   end
 
-  item.on_edit(runtime.renderer.winid, item, function()
-    if vim.api.nvim_win_is_valid(runtime.renderer.winid) then
-      vim.api.nvim_set_current_win(runtime.renderer.winid)
-      vim.cmd("stopinsert")
-      runtime.renderer:move_cursor_to_focus(runtime.focus_index)
-    end
-  end)
+  if item.on_edit then
+    item.on_edit(runtime.renderer.winid, item, function()
+      if vim.api.nvim_win_is_valid(runtime.renderer.winid) then
+        vim.api.nvim_set_current_win(runtime.renderer.winid)
+        vim.cmd("stopinsert")
+        runtime.renderer:move_cursor_to_focus(runtime.focus_index)
+      end
+    end)
+    return
+  end
+
+  if item.on_enter then
+    item.on_enter(runtime.renderer.winid, item)
+  end
 end
 
 local function setup_default_keymaps(buf, runtime)
