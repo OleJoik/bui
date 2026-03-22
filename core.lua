@@ -341,7 +341,7 @@ function Renderer:render_input(node, ctx)
       line_end = 2,
 
       input_row = 1,
-      input_col = 2,
+      input_col = 1 + padding,
 
       top = 0,
       bottom = 2,

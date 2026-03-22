@@ -94,7 +94,7 @@ local function App()
         )
       end,
     }),
-  }, { gap = 1 })
+  }, { gap = element_gap })
 end
 
 local function mount()
