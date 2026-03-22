@@ -13,6 +13,8 @@ local last_name = Signal.new("Lovelace")
 local email = Signal.new("ada@example.com")
 local city = Signal.new("London")
 local company = Signal.new("Analytical Engines Ltd")
+local status = Signal.new("Focus a text row and press <CR> to trigger on_enter.")
+local status_count = Signal.new(0)
 
 local element_gap = 0
 local input_padding = 0
@@ -24,6 +26,25 @@ local function App()
     }),
     Text({
       text = "Resize the window: rows collapse to single-column on narrow widths, then expand via width_sm (6/6 and 8/4).",
+    }),
+    Text({
+      text = function()
+        return string.format(
+          "Action row (%d): press <CR> here to fire a text on_enter handler.",
+          status_count:get()
+        )
+      end,
+      on_enter = function()
+        local next_count = status_count:get() + 1
+        status_count:set(next_count)
+        status:set(string.format("Text on_enter fired %d times.", next_count))
+      end,
+    }),
+    Text({
+      text = function()
+        return "Status: " .. status:get()
+      end,
+      focusable = true,
     }),
 
     Row({
