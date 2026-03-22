@@ -14,6 +14,10 @@ local email = Signal.new("ada@example.com")
 local city = Signal.new("London")
 local company = Signal.new("Analytical Engines Ltd")
 
+local element_gap = 0
+local wrapped_row_gap = 1
+local input_padding = 0
+
 local function App()
   return Column({
     Text({
@@ -27,6 +31,7 @@ local function App()
       Input({
         label = "First name",
         width_sm = 6,
+        padding = input_padding,
         value = function()
           return first_name:get()
         end,
@@ -35,17 +40,19 @@ local function App()
       Input({
         label = "Last name",
         width_sm = 6,
+        padding = input_padding,
         value = function()
           return last_name:get()
         end,
         on_edit = live_signal_editor("Last name", last_name),
       }),
-    }, { gap = 2 }),
+    }, { gap = element_gap, wrap_gap = wrapped_row_gap }),
 
     Row({
       Input({
         label = "Email",
         width_sm = 8,
+        padding = input_padding,
         value = function()
           return email:get()
         end,
@@ -55,6 +62,7 @@ local function App()
         Input({
           label = "City",
           width = 18,
+          padding = input_padding,
           value = function()
             return city:get()
           end,
@@ -63,16 +71,17 @@ local function App()
         Input({
           label = "Company",
           width = 24,
+          padding = input_padding,
           value = function()
             return company:get()
           end,
           on_edit = live_signal_editor("Company", company),
         }),
       }, {
-        gap = 1,
+        gap = element_gap,
         width_sm = 4,
       }),
-    }, { gap = 2 }),
+    }, { gap = element_gap, wrap_gap = wrapped_row_gap }),
 
     Text({
       text = function()
@@ -86,7 +95,7 @@ local function App()
         )
       end,
     }),
-  }, { gap = 1 })
+  }, { gap = wrapped_row_gap })
 end
 
 local function mount()

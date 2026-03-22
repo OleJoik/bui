@@ -193,13 +193,18 @@ local function make_input_lines(label, value, width, opts)
   value = tostring(value or "")
   width = tonumber(width) or 24
   opts = opts or {}
+  local padding = math.max(0, math.floor(tonumber(opts.padding) or 0))
 
-  local inner_width = width - 4
+  local inner_width = width - (2 + (padding * 2))
   local shown_value = opts.truncate and preview_text(value, inner_width) or value
 
   local top_fill = math.max(0, width - strw(label) - 5)
   local top = "┌─ " .. label .. " " .. string.rep("─", top_fill) .. "┐"
-  local mid = "│ " .. pad_right(shown_value, inner_width) .. " │"
+  local mid = "│"
+    .. string.rep(" ", padding)
+    .. pad_right(shown_value, inner_width)
+    .. string.rep(" ", padding)
+    .. "│"
   local bot = "└" .. string.rep("─", width - 2) .. "┘"
 
   return { top, mid, bot }
@@ -300,6 +305,7 @@ end
 function Renderer:render_input(node, ctx)
   local props = node.props
   local label = tostring(props.label or "")
+  local padding = math.max(0, math.floor(tonumber(props.padding) or 0))
 
   local value = props.value
   if type(value) == "function" then
@@ -307,14 +313,17 @@ function Renderer:render_input(node, ctx)
   end
   value = tostring(value or "")
 
-  local intrinsic_width = math.max(24, strw(label) + 6, strw(value) + 4)
+  local intrinsic_width = math.max(24, strw(label) + 6, strw(value) + 2 + (padding * 2))
   local width = props.width or intrinsic_width
 
   if ctx.available_width then
     width = math.max(6, ctx.available_width)
   end
 
-  local lines = make_input_lines(label, value, width, { truncate = true })
+  local lines = make_input_lines(label, value, width, {
+    truncate = true,
+    padding = padding,
+  })
   local top, mid, bot = lines[1], lines[2], lines[3]
 
   local my_focus_index = ctx.next_focus_index
@@ -382,8 +391,8 @@ end
 
 function Renderer:render_row(node, ctx)
   local children = node.children or {}
-  local gap = node.props.gap or 1
-  local wrap_gap = node.props.wrap_gap or gap
+  local gap = node.props.gap or 0
+  local wrap_gap = node.props.wrap_gap or 1
 
   local win_width = self:get_width()
   local container_width = ctx.available_width or win_width
