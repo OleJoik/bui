@@ -131,7 +131,7 @@ local function shift_focusables(focusables, row_delta, col_delta)
       focused = item.focused,
       on_edit = item.on_edit,
       on_enter = item.on_enter,
-      on_keymap = item.on_keymap,
+      focus_keymap = item.focus_keymap,
       label = item.label,
       width = item.width,
 
@@ -333,6 +333,9 @@ end
 
 function Renderer:render_text(node, ctx)
   local props = node.props or {}
+  -- `on_focus_keymap` is the explicit API name.
+  -- Keep `on_keymap` as a backwards-compatible alias.
+  local focus_keymap = props.on_focus_keymap or props.on_keymap
   local text = props.text
   if type(text) == "function" then
     text = text()
@@ -355,7 +358,7 @@ function Renderer:render_text(node, ctx)
     table.insert(focusables, {
       focused = focused,
       on_enter = props.on_enter,
-      on_keymap = props.on_keymap,
+      focus_keymap = focus_keymap,
       label = tostring(text or ""),
       width = text_width,
 
@@ -377,6 +380,9 @@ end
 
 function Renderer:render_input(node, ctx)
   local props = node.props
+  -- `on_focus_keymap` is the explicit API name.
+  -- Keep `on_keymap` as a backwards-compatible alias.
+  local focus_keymap = props.on_focus_keymap or props.on_keymap
   local label = tostring(props.label or "")
   local padding = math.max(0, math.floor(tonumber(props.padding) or 0))
 
@@ -407,7 +413,7 @@ function Renderer:render_input(node, ctx)
     {
       focused = focused,
       on_edit = props.on_edit,
-      on_keymap = props.on_keymap,
+      focus_keymap = focus_keymap,
       label = label,
       width = width,
       padding = padding,
@@ -850,8 +856,8 @@ local function create_runtime(renderer, app_fn)
   function runtime:sync_focusable_keymaps()
     local requested = {}
     for _, item in ipairs(self.renderer.focusables or {}) do
-      if type(item.on_keymap) == "table" then
-        for lhs, handler in pairs(item.on_keymap) do
+      if type(item.focus_keymap) == "table" then
+        for lhs, handler in pairs(item.focus_keymap) do
           if
             type(lhs) == "string"
             and lhs ~= ""
@@ -875,11 +881,11 @@ local function create_runtime(renderer, app_fn)
       if not self.dynamic_keymaps[lhs] then
         vim.keymap.set("n", lhs, function()
           local item = self.renderer:get_focused_item(self.focus_index)
-          if not item or type(item.on_keymap) ~= "table" then
+          if not item or type(item.focus_keymap) ~= "table" then
             return
           end
 
-          local handler = item.on_keymap[lhs]
+          local handler = item.focus_keymap[lhs]
           if type(handler) == "function" then
             handler(self.renderer.winid, item)
           end
@@ -940,8 +946,8 @@ local function trigger_keymap(runtime, lhs, opts)
   opts = opts or {}
 
   local item = runtime.renderer:get_focused_item(runtime.focus_index)
-  if item and type(item.on_keymap) == "table" then
-    local handler = item.on_keymap[lhs]
+  if item and type(item.focus_keymap) == "table" then
+    local handler = item.focus_keymap[lhs]
     if type(handler) == "function" then
       handler(runtime.renderer.winid, item)
       return
