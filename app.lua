@@ -3,6 +3,7 @@ local core = require("core")
 local Signal = core.Signal
 local Text = core.Text
 local Input = core.Input
+local Button = core.Button
 local Column = core.Column
 local Row = core.Row
 local Renderer = core.Renderer
@@ -15,6 +16,8 @@ local city = Signal.new("London")
 local company = Signal.new("Analytical Engines Ltd")
 local status = Signal.new("Focus a text row and press <CR> to trigger on_keymap.")
 local status_count = Signal.new(0)
+local press_count = Signal.new(0)
+local notifications_enabled = Signal.new(false)
 
 local element_gap = 0
 local input_padding = 0
@@ -50,6 +53,38 @@ local function App()
         return "Status: " .. status:get()
       end,
       focusable = true,
+    }),
+    Row({
+      Button({
+        label = "Run action",
+        on_press = function()
+          local next_count = press_count:get() + 1
+          press_count:set(next_count)
+          status:set(string.format("Run action pressed %d times.", next_count))
+        end,
+      }),
+      Button({
+        label = "Notifications",
+        toggleable = true,
+        toggled = function()
+          return notifications_enabled:get()
+        end,
+        on_toggle = function(next_state)
+          notifications_enabled:set(next_state)
+          status:set(
+            next_state and "Notifications enabled." or "Notifications disabled."
+          )
+        end,
+      }),
+    }, { gap = element_gap }),
+    Text({
+      text = function()
+        return string.format(
+          "Buttons: run_count=%d, notifications=%s",
+          press_count:get(),
+          notifications_enabled:get() and "on" or "off"
+        )
+      end,
     }),
 
     Row({

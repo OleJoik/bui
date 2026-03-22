@@ -67,6 +67,13 @@ local function Input(props)
   }
 end
 
+local function Button(props)
+  return {
+    type = "button",
+    props = props or {},
+  }
+end
+
 local function Column(children, props)
   return {
     type = "column",
@@ -85,6 +92,7 @@ end
 
 M.Text = Text
 M.Input = Input
+M.Button = Button
 M.Column = Column
 M.Row = Row
 
@@ -426,6 +434,83 @@ function Renderer:render_input(node, ctx)
   return make_box({ top, mid, bot }, focusables)
 end
 
+function Renderer:render_button(node, ctx)
+  local props = node.props or {}
+  local label = props.label or props.text or "Button"
+  if type(label) == "function" then
+    label = label()
+  end
+  label = tostring(label or "Button")
+
+  local is_toggleable = props.toggleable == true
+  local toggled = props.toggled
+  if type(toggled) == "function" then
+    toggled = toggled()
+  end
+  toggled = toggled == true
+
+  local prefix = is_toggleable and (toggled and "[x] " or "[ ] ") or ""
+  local button_text = "[" .. prefix .. label .. "]"
+
+  local my_focus_index = ctx.next_focus_index
+  local focused = my_focus_index == ctx.focus_index
+  ctx.next_focus_index = ctx.next_focus_index + 1
+
+  local invoke_press = function(winid, item)
+    if type(props.on_press) == "function" then
+      props.on_press(winid, item)
+    end
+  end
+
+  local invoke_toggle = function(winid, item)
+    local next_state = not toggled
+    if type(props.on_toggle) == "function" then
+      props.on_toggle(next_state, winid, item)
+    elseif type(props.on_press) == "function" then
+      props.on_press(winid, item)
+    end
+  end
+
+  local on_keymap = {
+    ["<CR>"] = function(winid, item)
+      if is_toggleable then
+        invoke_toggle(winid, item)
+      else
+        invoke_press(winid, item)
+      end
+    end,
+  }
+
+  if type(props.on_keymap) == "table" then
+    for lhs, handler in pairs(props.on_keymap) do
+      on_keymap[lhs] = handler
+    end
+  end
+
+  local width = strw(button_text)
+  local focusables = {
+    {
+      focused = focused,
+      on_keymap = on_keymap,
+      label = label,
+      width = width,
+
+      line_start = 0,
+      line_end = 0,
+
+      input_row = 0,
+      input_col = 0,
+
+      top = 0,
+      bottom = 0,
+      left = 0,
+      right = math.max(0, width - 1),
+    },
+  }
+
+  return make_box({ button_text }, focusables)
+end
+
 function Renderer:render_column(node, ctx)
   local children = node.children or {}
   local gap = node.props.gap or 0
@@ -618,6 +703,8 @@ function Renderer:render_node(node, ctx)
     return self:render_text(node, ctx)
   elseif node.type == "input" then
     return self:render_input(node, ctx)
+  elseif node.type == "button" then
+    return self:render_button(node, ctx)
   elseif node.type == "column" then
     return self:render_column(node, ctx)
   elseif node.type == "row" then
