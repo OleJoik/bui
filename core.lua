@@ -329,12 +329,14 @@ function Renderer:get_width()
   return self.width or 80
 end
 
-function Renderer:render_text(node, _ctx)
+function Renderer:render_text(node, ctx)
   local text = node.props.text
   if type(text) == "function" then
     text = text()
   end
-  return make_box({ tostring(text or "") })
+  local width = (ctx and ctx.available_width) or self:get_width()
+  local lines = wrap_text(text, width)
+  return make_box(lines)
 end
 
 function Renderer:render_input(node, ctx)
@@ -355,13 +357,11 @@ function Renderer:render_input(node, ctx)
     width = math.max(6, ctx.available_width)
   end
 
-  local lines, meta = make_input_lines(label, value, width, {
-    wrap = true,
+  local lines = make_input_lines(label, value, width, {
+    truncate = true,
     padding = padding,
   })
-  local line_end = #lines - 1
-  local input_row = math.max(1, meta.content_line_count)
-  local input_col = 1 + padding + meta.last_line_chars
+  local top, mid, bot = lines[1], lines[2], lines[3]
 
   local my_focus_index = ctx.next_focus_index
   local focused = my_focus_index == ctx.focus_index
@@ -376,19 +376,19 @@ function Renderer:render_input(node, ctx)
       padding = padding,
 
       line_start = 0,
-      line_end = line_end,
+      line_end = 2,
 
-      input_row = input_row,
-      input_col = input_col,
+      input_row = 1,
+      input_col = 1 + padding,
 
       top = 0,
-      bottom = line_end,
+      bottom = 2,
       left = 0,
       right = width - 1,
     },
   }
 
-  return make_box(lines, focusables)
+  return make_box({ top, mid, bot }, focusables)
 end
 
 function Renderer:render_column(node, ctx)
@@ -863,10 +863,6 @@ local function setup_default_keymaps(buf, runtime)
     edit_focused(runtime)
   end, opts)
 
-  vim.keymap.set("n", "i", function()
-    edit_focused(runtime)
-  end, opts)
-
   vim.keymap.set("n", "q", function()
     vim.api.nvim_buf_delete(buf, { force = true })
   end, opts)
@@ -916,16 +912,8 @@ local function open_live_input(opts)
 
   local border_ns = vim.api.nvim_create_namespace("mini_react_ui_input_border_" .. border_buf)
 
-  local function get_content_height(text)
-    local wrapped = wrap_text(text, inner_width)
-    return #wrapped
-  end
-
   local function render_border()
-    local lines = make_input_lines(title, value, width, {
-      wrap = true,
-      padding = padding,
-    })
+    local lines = make_input_lines(title, value, width, { truncate = true })
 
     vim.bo[border_buf].modifiable = true
     vim.api.nvim_buf_set_lines(border_buf, 0, -1, false, lines)
@@ -933,16 +921,12 @@ local function open_live_input(opts)
 
     vim.api.nvim_buf_clear_namespace(border_buf, border_ns, 0, -1)
     vim.api.nvim_buf_add_highlight(border_buf, border_ns, "MiniReactInputEditingBorder", 0, 0, -1)
-    vim.api.nvim_buf_add_highlight(border_buf, border_ns, "MiniReactInputEditingBorder", #lines - 1, 0, -1)
-    for line_nr = 1, #lines - 2 do
-      vim.api.nvim_buf_add_highlight(border_buf, border_ns, "MiniReactInputEditingBorder", line_nr, 0, 2)
-      vim.api.nvim_buf_add_highlight(border_buf, border_ns, "MiniReactInputEditingBorder", line_nr, width - 2, width)
-    end
+    vim.api.nvim_buf_add_highlight(border_buf, border_ns, "MiniReactInputEditingBorder", 2, 0, -1)
+    vim.api.nvim_buf_add_highlight(border_buf, border_ns, "MiniReactInputEditingBorder", 1, 0, 2)
+    vim.api.nvim_buf_add_highlight(border_buf, border_ns, "MiniReactInputEditingBorder", 1, width - 2, width)
   end
 
   vim.api.nvim_buf_set_lines(input_buf, 0, -1, false, { value })
-
-  local initial_height = get_content_height(value)
 
   local border_win = vim.api.nvim_open_win(border_buf, false, {
     relative = "win",
@@ -950,7 +934,7 @@ local function open_live_input(opts)
     row = anchor_item.top,
     col = anchor_item.left,
     width = width,
-    height = initial_height + 2,
+    height = 3,
     border = "none",
     style = "minimal",
     focusable = false,
@@ -964,7 +948,7 @@ local function open_live_input(opts)
     row = anchor_item.top + 1,
     col = anchor_item.left + 1 + padding,
     width = inner_width,
-    height = initial_height,
+    height = 1,
     border = "none",
     style = "minimal",
     focusable = true,
@@ -984,7 +968,7 @@ local function open_live_input(opts)
   vim.wo[input_win].number = false
   vim.wo[input_win].relativenumber = false
   vim.wo[input_win].cursorline = false
-  vim.wo[input_win].wrap = true
+  vim.wo[input_win].wrap = false
   vim.wo[input_win].signcolumn = "no"
   vim.wo[input_win].foldcolumn = "0"
   vim.wo[input_win].spell = false
@@ -1027,38 +1011,6 @@ local function open_live_input(opts)
     syncing = true
     value = get_input_value()
     render_border()
-
-    local content_height = get_content_height(value)
-    if vim.api.nvim_win_is_valid(border_win) then
-      vim.api.nvim_win_set_config(border_win, {
-        relative = "win",
-        win = parent_win,
-        row = anchor_item.top,
-        col = anchor_item.left,
-        width = width,
-        height = content_height + 2,
-        border = "none",
-        style = "minimal",
-        focusable = false,
-        zindex = 60,
-        noautocmd = true,
-      })
-    end
-    if vim.api.nvim_win_is_valid(input_win) then
-      vim.api.nvim_win_set_config(input_win, {
-        relative = "win",
-        win = parent_win,
-        row = anchor_item.top + 1,
-        col = anchor_item.left + 1 + padding,
-        width = inner_width,
-        height = content_height,
-        border = "none",
-        style = "minimal",
-        focusable = true,
-        zindex = 61,
-        noautocmd = true,
-      })
-    end
 
     if on_change then
       on_change(value)
