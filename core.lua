@@ -450,8 +450,7 @@ function Renderer:render_button(node, ctx)
   end
   label = tostring(label or "Click me")
 
-  local icon = tostring(props.icon or "󰌵")
-  local content = string.format(" %s %s  ↵ ", icon, label)
+  local content = string.format(" %s  ↵ ", label)
   local inner_width = math.max(1, strw(content))
   local width = math.max(6, tonumber(props.width) or (inner_width + 2))
   local top = "┌" .. string.rep("─", width - 2) .. "┐"
@@ -489,6 +488,8 @@ function Renderer:render_button(node, ctx)
       on_keymap = on_keymap,
       label = label,
       width = width,
+      hl = "MiniReactButton",
+      hl_focused = "MiniReactButtonFocused",
 
       line_start = 0,
       line_end = 2,
@@ -520,8 +521,8 @@ function Renderer:render_checkbox(node, ctx)
   end
   checked = checked == true
 
-  local icon_checked = tostring(props.icon_checked or "󰄱")
-  local icon_unchecked = tostring(props.icon_unchecked or "󰄰")
+  local icon_checked = tostring(props.icon_checked or "[✓]")
+  local icon_unchecked = tostring(props.icon_unchecked or "[ ]")
   local marker = checked and icon_checked or icon_unchecked
   local line = string.format("%s  %s", marker, label)
 
@@ -558,6 +559,8 @@ function Renderer:render_checkbox(node, ctx)
       on_keymap = on_keymap,
       label = label,
       width = width,
+      hl = "MiniReactCheckbox",
+      hl_focused = "MiniReactCheckboxFocused",
 
       line_start = 0,
       line_end = 0,
@@ -784,7 +787,9 @@ function Renderer:apply_highlights()
   vim.api.nvim_buf_clear_namespace(self.bufnr, self.ns, 0, -1)
 
   for _, item in ipairs(self.focusables) do
-    local hl = item.focused and "MiniReactInputFocused" or "MiniReactInput"
+    local normal_hl = item.hl or "MiniReactInput"
+    local focused_hl = item.hl_focused or "MiniReactInputFocused"
+    local hl = item.focused and focused_hl or normal_hl
 
     for line_nr = item.line_start, item.line_end do
       local line = vim.api.nvim_buf_get_lines(self.bufnr, line_nr, line_nr + 1, false)[1] or ""
@@ -1382,6 +1387,26 @@ local function setup_highlights()
   vim.api.nvim_set_hl(0, "MiniReactInputEditingText", {
     fg = "#ffffff",
     bg = "#283457",
+  })
+
+  vim.api.nvim_set_hl(0, "MiniReactButton", {
+    fg = "#c0caf5",
+    bg = "#2a2f43",
+  })
+
+  vim.api.nvim_set_hl(0, "MiniReactButtonFocused", {
+    fg = "#ff9e64",
+    bg = "#3b3450",
+    bold = true,
+  })
+
+  vim.api.nvim_set_hl(0, "MiniReactCheckbox", {
+    fg = "#9ece6a",
+  })
+
+  vim.api.nvim_set_hl(0, "MiniReactCheckboxFocused", {
+    fg = "#bbf086",
+    bold = true,
   })
 end
 
