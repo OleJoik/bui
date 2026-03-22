@@ -81,6 +81,13 @@ local function Checkbox(props)
   }
 end
 
+local function Select(props)
+  return {
+    type = "select",
+    props = props or {},
+  }
+end
+
 local function Column(children, props)
   return {
     type = "column",
@@ -101,6 +108,7 @@ M.Text = Text
 M.Input = Input
 M.Button = Button
 M.Checkbox = Checkbox
+M.Select = Select
 M.Column = Column
 M.Row = Row
 
@@ -578,6 +586,275 @@ function Renderer:render_checkbox(node, ctx)
   return make_box({ line }, focusables)
 end
 
+local function normalize_select_option(option, index)
+  if type(option) == "table" then
+    local value = option.value
+    if value == nil then
+      value = option.label
+    end
+    local label = option.label
+    if label == nil then
+      label = tostring(value or ("Option " .. index))
+    end
+
+    return {
+      value = value,
+      label = tostring(label),
+    }
+  end
+
+  local value = option
+  return {
+    value = value,
+    label = tostring(value or ("Option " .. index)),
+  }
+end
+
+local function normalize_select_options(options)
+  local normalized = {}
+  for i, option in ipairs(options or {}) do
+    table.insert(normalized, normalize_select_option(option, i))
+  end
+  return normalized
+end
+
+local function resolve_selected_index(options, value)
+  for i, option in ipairs(options) do
+    if option.value == value then
+      return i
+    end
+  end
+  return #options > 0 and 1 or nil
+end
+
+local function open_select_dropdown(opts)
+  local parent_win = opts.parent_win
+  local anchor_item = opts.anchor_item or {}
+  local title = tostring(opts.title or anchor_item.label or "Select")
+  local options = normalize_select_options(opts.options or {})
+  local selected_index = tonumber(opts.selected_index) or 1
+  local on_select = opts.on_select
+  local on_close = opts.on_close
+
+  if #options == 0 then
+    return
+  end
+
+  if selected_index < 1 or selected_index > #options then
+    selected_index = 1
+  end
+
+  local width = math.max(12, tonumber(anchor_item.width) or 24)
+  for _, option in ipairs(options) do
+    width = math.max(width, strw(option.label) + 4)
+  end
+
+  local height = #options + 2
+  local row = (anchor_item.bottom or 0) + 1
+  local col = anchor_item.left or 0
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].modifiable = false
+  vim.bo[buf].filetype = "mini_react_ui_select"
+
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative = "win",
+    win = parent_win,
+    row = row,
+    col = col,
+    width = width,
+    height = height,
+    border = "single",
+    style = "minimal",
+    focusable = true,
+    zindex = 62,
+    noautocmd = true,
+    title = " " .. title .. " ",
+    title_pos = "left",
+  })
+
+  vim.wo[win].number = false
+  vim.wo[win].relativenumber = false
+  vim.wo[win].cursorline = false
+  vim.wo[win].wrap = false
+  vim.wo[win].signcolumn = "no"
+  vim.wo[win].foldcolumn = "0"
+  vim.wo[win].spell = false
+  vim.wo[win].list = false
+
+  local closed = false
+  local ns = vim.api.nvim_create_namespace("mini_react_ui_select_" .. buf)
+
+  local function close()
+    if closed then
+      return
+    end
+    closed = true
+
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+
+    if on_close then
+      vim.schedule(on_close)
+    end
+  end
+
+  local function render()
+    local lines = {}
+    for i, option in ipairs(options) do
+      local prefix = (i == selected_index) and "▸ " or "  "
+      table.insert(lines, pad_right(prefix .. option.label, width))
+    end
+
+    vim.bo[buf].modifiable = true
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.bo[buf].modifiable = false
+
+    vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+    for i = 1, #options do
+      local hl = (i == selected_index) and "MiniReactSelectOptionFocused"
+        or "MiniReactSelectOption"
+      vim.api.nvim_buf_add_highlight(buf, ns, hl, i - 1, 0, -1)
+    end
+
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_set_cursor(win, { selected_index, 0 })
+    end
+  end
+
+  local function submit()
+    local option = options[selected_index]
+    if option and type(on_select) == "function" then
+      on_select(option.value, option.label, selected_index)
+    end
+    close()
+  end
+
+  vim.keymap.set("n", "j", function()
+    selected_index = math.min(#options, selected_index + 1)
+    render()
+  end, { buffer = buf, silent = true })
+
+  vim.keymap.set("n", "k", function()
+    selected_index = math.max(1, selected_index - 1)
+    render()
+  end, { buffer = buf, silent = true })
+
+  vim.keymap.set("n", "<Down>", function()
+    selected_index = math.min(#options, selected_index + 1)
+    render()
+  end, { buffer = buf, silent = true })
+
+  vim.keymap.set("n", "<Up>", function()
+    selected_index = math.max(1, selected_index - 1)
+    render()
+  end, { buffer = buf, silent = true })
+
+  vim.keymap.set("n", "<CR>", submit, { buffer = buf, silent = true })
+  vim.keymap.set("n", "<Space>", submit, { buffer = buf, silent = true })
+  vim.keymap.set("n", "<Esc>", close, { buffer = buf, silent = true })
+  vim.keymap.set("n", "q", close, { buffer = buf, silent = true })
+
+  render()
+end
+
+function Renderer:render_select(node, ctx)
+  local props = node.props or {}
+  local label = tostring(props.label or "Select")
+  local options = normalize_select_options(props.options or {})
+
+  local value = props.value
+  if type(value) == "function" then
+    value = value()
+  end
+
+  local selected_index = resolve_selected_index(options, value)
+  local selected_label = selected_index and options[selected_index].label or "No options"
+  local shown = selected_label .. " ▾"
+
+  local intrinsic_width = math.max(24, strw(label) + 6, strw(shown) + 4)
+  local width = props.width or intrinsic_width
+  if ctx.available_width then
+    width = math.max(10, ctx.available_width)
+  end
+
+  local top_fill = math.max(0, width - strw(label) - 5)
+  local top = "┌─ " .. label .. " " .. string.rep("─", top_fill) .. "┐"
+  local mid = "│" .. pad_right(" " .. shown, width - 2) .. "│"
+  local bot = "└" .. string.rep("─", width - 2) .. "┘"
+
+  local my_focus_index = ctx.next_focus_index
+  local focused = my_focus_index == ctx.focus_index
+  ctx.next_focus_index = ctx.next_focus_index + 1
+
+  local on_activate = function(winid, item)
+    if #options == 0 then
+      return
+    end
+
+    open_select_dropdown({
+      parent_win = winid,
+      anchor_item = item,
+      title = label,
+      options = options,
+      selected_index = selected_index or 1,
+      on_select = function(next_value, next_label, next_index)
+        if type(props.on_change) == "function" then
+          props.on_change(next_value, next_label, next_index, winid, item)
+        end
+      end,
+      on_close = function()
+        if vim.api.nvim_win_is_valid(winid) then
+          vim.api.nvim_set_current_win(winid)
+        end
+      end,
+    })
+  end
+
+  local on_keymap = {
+    ["<CR>"] = function(winid, item)
+      on_activate(winid, item)
+    end,
+    ["<Space>"] = function(winid, item)
+      on_activate(winid, item)
+    end,
+  }
+
+  if type(props.on_keymap) == "table" then
+    for lhs, handler in pairs(props.on_keymap) do
+      on_keymap[lhs] = handler
+    end
+  end
+
+  local focusables = {
+    {
+      focused = focused,
+      on_keymap = on_keymap,
+      label = label,
+      width = width,
+      hl = "MiniReactSelect",
+      hl_focused = "MiniReactSelectFocused",
+
+      line_start = 0,
+      line_end = 2,
+
+      input_row = 1,
+      input_col = 1,
+
+      top = 0,
+      bottom = 2,
+      left = 0,
+      right = width - 1,
+    },
+  }
+
+  return make_box({ top, mid, bot }, focusables)
+end
+
 function Renderer:render_column(node, ctx)
   local children = node.children or {}
   local gap = node.props.gap or 0
@@ -774,6 +1051,8 @@ function Renderer:render_node(node, ctx)
     return self:render_button(node, ctx)
   elseif node.type == "checkbox" then
     return self:render_checkbox(node, ctx)
+  elseif node.type == "select" then
+    return self:render_select(node, ctx)
   elseif node.type == "column" then
     return self:render_column(node, ctx)
   elseif node.type == "row" then
@@ -1406,6 +1685,24 @@ local function setup_highlights()
 
   vim.api.nvim_set_hl(0, "MiniReactCheckboxFocused", {
     fg = "#bbf086",
+    bold = true,
+  })
+
+  vim.api.nvim_set_hl(0, "MiniReactSelect", {
+    fg = "#7dcfff",
+  })
+
+  vim.api.nvim_set_hl(0, "MiniReactSelectFocused", {
+    fg = "#b7e7ff",
+    bold = true,
+  })
+
+  vim.api.nvim_set_hl(0, "MiniReactSelectOption", {
+    fg = "#c0caf5",
+  })
+
+  vim.api.nvim_set_hl(0, "MiniReactSelectOptionFocused", {
+    fg = "#ff9e64",
     bold = true,
   })
 end

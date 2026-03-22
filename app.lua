@@ -5,6 +5,7 @@ local Text = core.Text
 local Input = core.Input
 local Button = core.Button
 local Checkbox = core.Checkbox
+local Select = core.Select
 local Column = core.Column
 local Row = core.Row
 local Renderer = core.Renderer
@@ -19,6 +20,7 @@ local status = Signal.new("Focus a text row and press <CR> to trigger on_keymap.
 local status_count = Signal.new(0)
 local press_count = Signal.new(0)
 local notifications_enabled = Signal.new(false)
+local role = Signal.new("Engineer")
 
 local element_gap = 0
 local input_padding = 0
@@ -74,6 +76,23 @@ local function App()
           status:set(
             next_state and "Notifications enabled." or "Notifications disabled."
           )
+        end,
+      }),
+      Select({
+        label = "Role",
+        width = 28,
+        value = function()
+          return role:get()
+        end,
+        options = {
+          { value = "Engineer", label = "Engineer" },
+          { value = "Designer", label = "Designer" },
+          { value = "Manager", label = "Manager" },
+          { value = "Founder", label = "Founder" },
+        },
+        on_change = function(next_value, next_label)
+          role:set(next_value)
+          status:set("Role selected: " .. tostring(next_label) .. ".")
         end,
       }),
     }, { gap = element_gap }),
@@ -158,6 +177,11 @@ local function App()
           city:get(),
           company:get()
         )
+      end,
+    }),
+    Text({
+      text = function()
+        return "Role: " .. role:get()
       end,
     }),
   }, { gap = element_gap })
