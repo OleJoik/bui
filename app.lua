@@ -105,7 +105,18 @@ local function mount()
   local renderer = Renderer.new(buf, win, 80)
   local runtime = core.create_runtime(renderer, App)
   core.setup_default_keymaps(buf, runtime)
+
+  vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
+    callback = function()
+      if
+        vim.api.nvim_buf_is_valid(buf)
+        and vim.api.nvim_win_is_valid(win)
+        and vim.api.nvim_win_get_buf(win) == buf
+      then
+        runtime:render()
+      end
+    end,
+  })
 end
 
 mount()
-
