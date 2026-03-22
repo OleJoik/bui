@@ -392,7 +392,6 @@ end
 function Renderer:render_row(node, ctx)
   local children = node.children or {}
   local gap = node.props.gap or 0
-  local wrap_gap = node.props.wrap_gap or 1
 
   local win_width = self:get_width()
   local container_width = ctx.available_width or win_width
@@ -526,10 +525,10 @@ function Renderer:render_row(node, ctx)
     row_offset = row_offset + box.height
 
     if s < #segments then
-      for _ = 1, wrap_gap do
+      for _ = 1, gap do
         table.insert(lines, blank_line(box.width))
       end
-      row_offset = row_offset + wrap_gap
+      row_offset = row_offset + gap
     end
   end
 

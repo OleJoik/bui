@@ -15,7 +15,6 @@ local city = Signal.new("London")
 local company = Signal.new("Analytical Engines Ltd")
 
 local element_gap = 0
-local wrapped_row_gap = 1
 local input_padding = 0
 
 local function App()
@@ -46,7 +45,7 @@ local function App()
         end,
         on_edit = live_signal_editor("Last name", last_name),
       }),
-    }, { gap = element_gap, wrap_gap = wrapped_row_gap }),
+    }, { gap = element_gap }),
 
     Row({
       Input({
@@ -81,7 +80,7 @@ local function App()
         gap = element_gap,
         width_sm = 4,
       }),
-    }, { gap = element_gap, wrap_gap = wrapped_row_gap }),
+    }, { gap = element_gap }),
 
     Text({
       text = function()
@@ -95,7 +94,7 @@ local function App()
         )
       end,
     }),
-  }, { gap = wrapped_row_gap })
+  }, { gap = 1 })
 end
 
 local function mount()
