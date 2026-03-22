@@ -67,6 +67,20 @@ local function Input(props)
   }
 end
 
+local function Button(props)
+  return {
+    type = "button",
+    props = props or {},
+  }
+end
+
+local function Checkbox(props)
+  return {
+    type = "checkbox",
+    props = props or {},
+  }
+end
+
 local function Column(children, props)
   return {
     type = "column",
@@ -85,6 +99,8 @@ end
 
 M.Text = Text
 M.Input = Input
+M.Button = Button
+M.Checkbox = Checkbox
 M.Column = Column
 M.Row = Row
 
@@ -426,6 +442,142 @@ function Renderer:render_input(node, ctx)
   return make_box({ top, mid, bot }, focusables)
 end
 
+function Renderer:render_button(node, ctx)
+  local props = node.props or {}
+  local label = props.label or props.text or "Click me"
+  if type(label) == "function" then
+    label = label()
+  end
+  label = tostring(label or "Click me")
+
+  local content = string.format(" %s  ↵ ", label)
+  local inner_width = math.max(1, strw(content))
+  local width = math.max(6, tonumber(props.width) or (inner_width + 2))
+  local top = "┌" .. string.rep("─", width - 2) .. "┐"
+  local mid = "│" .. pad_right(content, width - 2) .. "│"
+  local bot = "└" .. string.rep("─", width - 2) .. "┘"
+
+  local my_focus_index = ctx.next_focus_index
+  local focused = my_focus_index == ctx.focus_index
+  ctx.next_focus_index = ctx.next_focus_index + 1
+
+  local on_activate = function(winid, item)
+    if type(props.on_press) == "function" then
+      props.on_press(winid, item)
+    end
+  end
+
+  local on_keymap = {
+    ["<CR>"] = function(winid, item)
+      on_activate(winid, item)
+    end,
+    ["<Space>"] = function(winid, item)
+      on_activate(winid, item)
+    end,
+  }
+
+  if type(props.on_keymap) == "table" then
+    for lhs, handler in pairs(props.on_keymap) do
+      on_keymap[lhs] = handler
+    end
+  end
+
+  local focusables = {
+    {
+      focused = focused,
+      on_keymap = on_keymap,
+      label = label,
+      width = width,
+      hl = "MiniReactButton",
+      hl_focused = "MiniReactButtonFocused",
+
+      line_start = 0,
+      line_end = 2,
+
+      input_row = 1,
+      input_col = 1,
+
+      top = 0,
+      bottom = 2,
+      left = 0,
+      right = math.max(0, width - 1),
+    },
+  }
+
+  return make_box({ top, mid, bot }, focusables)
+end
+
+function Renderer:render_checkbox(node, ctx)
+  local props = node.props or {}
+  local label = props.label or props.text or "Checkbox"
+  if type(label) == "function" then
+    label = label()
+  end
+  label = tostring(label or "Checkbox")
+
+  local checked = props.checked
+  if type(checked) == "function" then
+    checked = checked()
+  end
+  checked = checked == true
+
+  local icon_checked = tostring(props.icon_checked or "[✓]")
+  local icon_unchecked = tostring(props.icon_unchecked or "[ ]")
+  local marker = checked and icon_checked or icon_unchecked
+  local line = string.format("%s  %s", marker, label)
+
+  local my_focus_index = ctx.next_focus_index
+  local focused = my_focus_index == ctx.focus_index
+  ctx.next_focus_index = ctx.next_focus_index + 1
+
+  local on_toggle = function(winid, item)
+    local next_state = not checked
+    if type(props.on_toggle) == "function" then
+      props.on_toggle(next_state, winid, item)
+    end
+  end
+
+  local on_keymap = {
+    ["<CR>"] = function(winid, item)
+      on_toggle(winid, item)
+    end,
+    ["<Space>"] = function(winid, item)
+      on_toggle(winid, item)
+    end,
+  }
+
+  if type(props.on_keymap) == "table" then
+    for lhs, handler in pairs(props.on_keymap) do
+      on_keymap[lhs] = handler
+    end
+  end
+
+  local width = strw(line)
+  local focusables = {
+    {
+      focused = focused,
+      on_keymap = on_keymap,
+      label = label,
+      width = width,
+      hl = "MiniReactCheckbox",
+      hl_focused = "MiniReactCheckboxFocused",
+
+      line_start = 0,
+      line_end = 0,
+
+      input_row = 0,
+      input_col = 0,
+
+      top = 0,
+      bottom = 0,
+      left = 0,
+      right = math.max(0, width - 1),
+    },
+  }
+
+  return make_box({ line }, focusables)
+end
+
 function Renderer:render_column(node, ctx)
   local children = node.children or {}
   local gap = node.props.gap or 0
@@ -618,6 +770,10 @@ function Renderer:render_node(node, ctx)
     return self:render_text(node, ctx)
   elseif node.type == "input" then
     return self:render_input(node, ctx)
+  elseif node.type == "button" then
+    return self:render_button(node, ctx)
+  elseif node.type == "checkbox" then
+    return self:render_checkbox(node, ctx)
   elseif node.type == "column" then
     return self:render_column(node, ctx)
   elseif node.type == "row" then
@@ -631,7 +787,9 @@ function Renderer:apply_highlights()
   vim.api.nvim_buf_clear_namespace(self.bufnr, self.ns, 0, -1)
 
   for _, item in ipairs(self.focusables) do
-    local hl = item.focused and "MiniReactInputFocused" or "MiniReactInput"
+    local normal_hl = item.hl or "MiniReactInput"
+    local focused_hl = item.hl_focused or "MiniReactInputFocused"
+    local hl = item.focused and focused_hl or normal_hl
 
     for line_nr = item.line_start, item.line_end do
       local line = vim.api.nvim_buf_get_lines(self.bufnr, line_nr, line_nr + 1, false)[1] or ""
@@ -1229,6 +1387,26 @@ local function setup_highlights()
   vim.api.nvim_set_hl(0, "MiniReactInputEditingText", {
     fg = "#ffffff",
     bg = "#283457",
+  })
+
+  vim.api.nvim_set_hl(0, "MiniReactButton", {
+    fg = "#c0caf5",
+    bg = "#2a2f43",
+  })
+
+  vim.api.nvim_set_hl(0, "MiniReactButtonFocused", {
+    fg = "#ff9e64",
+    bg = "#3b3450",
+    bold = true,
+  })
+
+  vim.api.nvim_set_hl(0, "MiniReactCheckbox", {
+    fg = "#9ece6a",
+  })
+
+  vim.api.nvim_set_hl(0, "MiniReactCheckboxFocused", {
+    fg = "#bbf086",
+    bold = true,
   })
 end
 
