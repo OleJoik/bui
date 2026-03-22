@@ -296,16 +296,10 @@ function Renderer:render_input(node, ctx)
   value = tostring(value or "")
 
   local intrinsic_width = math.max(24, strw(label) + 6, strw(value) + 4)
-  local width = props.width
-
-  if ctx.available_width and is_grid_units(width) then
-    width = intrinsic_width
-  end
-
-  width = width or intrinsic_width
+  local width = props.width or intrinsic_width
 
   if ctx.available_width then
-    width = math.max(6, math.min(width, ctx.available_width))
+    width = math.max(6, ctx.available_width)
   end
 
   local lines = make_input_lines(label, value, width, { truncate = true })
