@@ -107,6 +107,5 @@ local function mount()
   core.setup_default_keymaps(buf, runtime)
 end
 
-return {
-  mount = mount,
-}
+mount()
+
