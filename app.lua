@@ -39,7 +39,7 @@ local function App()
         status_count:set(next_count)
         status:set(string.format("Text on_enter fired %d times.", next_count))
       end,
-      on_focus_keymap = {
+      on_keymap = {
         ["gr"] = function()
           status:set("Custom text keymap `gr` fired on focused text.")
         end,
@@ -50,6 +50,14 @@ local function App()
         return "Status: " .. status:get()
       end,
       focusable = true,
+      on_keymap = {
+        ["gs"] = function()
+          status:set("Global keymap `gs` fired (focused_only = false).")
+        end,
+      },
+      on_keymap_config = {
+        focused_only = false,
+      },
     }),
 
     Row({
@@ -82,7 +90,7 @@ local function App()
           return email:get()
         end,
         on_edit = live_signal_editor("Email", email),
-        on_focus_keymap = {
+        on_keymap = {
           ["gr"] = function(_, item)
             status:set("Custom input keymap `gr` fired on " .. item.label .. ".")
           end,
