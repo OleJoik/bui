@@ -20,13 +20,13 @@ local function App()
       text = "Profile editor",
     }),
     Text({
-      text = "Resize the window: row children with width=1..12 share a 12-column layout (6/6 then 8/4).",
+      text = "Resize the window: rows collapse to single-column on narrow widths, then expand via width_sm (6/6 and 8/4).",
     }),
 
     Row({
       Input({
         label = "First name",
-        width = 6,
+        width_sm = 6,
         value = function()
           return first_name:get()
         end,
@@ -34,7 +34,7 @@ local function App()
       }),
       Input({
         label = "Last name",
-        width = 6,
+        width_sm = 6,
         value = function()
           return last_name:get()
         end,
@@ -45,7 +45,7 @@ local function App()
     Row({
       Input({
         label = "Email",
-        width = 8,
+        width_sm = 8,
         value = function()
           return email:get()
         end,
@@ -70,7 +70,7 @@ local function App()
         }),
       }, {
         gap = 1,
-        width = 4,
+        width_sm = 4,
       }),
     }, { gap = 2 }),
 
