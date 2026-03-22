@@ -188,6 +188,26 @@ local function preview_text(text, max_chars)
   return vim.fn.strcharpart(text, 0, max_chars - 1) .. "…"
 end
 
+local function wrap_text(text, width)
+  text = tostring(text or "")
+  width = math.max(1, math.floor(tonumber(width) or 1))
+
+  local lines = {}
+  local total_chars = vim.fn.strchars(text)
+
+  if total_chars == 0 then
+    return { "" }
+  end
+
+  local start_char = 0
+  while start_char < total_chars do
+    table.insert(lines, vim.fn.strcharpart(text, start_char, width))
+    start_char = start_char + width
+  end
+
+  return lines
+end
+
 local function make_input_lines(label, value, width, opts)
   label = tostring(label or "")
   value = tostring(value or "")
@@ -195,19 +215,36 @@ local function make_input_lines(label, value, width, opts)
   opts = opts or {}
   local padding = math.max(0, math.floor(tonumber(opts.padding) or 0))
 
-  local inner_width = width - (2 + (padding * 2))
-  local shown_value = opts.truncate and preview_text(value, inner_width) or value
+  local inner_width = math.max(1, width - (2 + (padding * 2)))
+  local content_lines
+  if opts.wrap then
+    content_lines = wrap_text(value, inner_width)
+  else
+    local shown_value = opts.truncate and preview_text(value, inner_width) or value
+    content_lines = { shown_value }
+  end
 
   local top_fill = math.max(0, width - strw(label) - 5)
   local top = "┌─ " .. label .. " " .. string.rep("─", top_fill) .. "┐"
-  local mid = "│"
-    .. string.rep(" ", padding)
-    .. pad_right(shown_value, inner_width)
-    .. string.rep(" ", padding)
-    .. "│"
   local bot = "└" .. string.rep("─", width - 2) .. "┘"
 
-  return { top, mid, bot }
+  local lines = { top }
+  for _, line in ipairs(content_lines) do
+    table.insert(lines, "│"
+      .. string.rep(" ", padding)
+      .. pad_right(line, inner_width)
+      .. string.rep(" ", padding)
+      .. "│")
+  end
+  table.insert(lines, bot)
+
+  local last_line = content_lines[#content_lines] or ""
+  local meta = {
+    content_line_count = #content_lines,
+    last_line_chars = strw(last_line),
+  }
+
+  return lines, meta
 end
 local GRID_BREAKPOINTS = {
   sm = 64,
@@ -292,12 +329,14 @@ function Renderer:get_width()
   return self.width or 80
 end
 
-function Renderer:render_text(node, _ctx)
+function Renderer:render_text(node, ctx)
   local text = node.props.text
   if type(text) == "function" then
     text = text()
   end
-  return make_box({ tostring(text or "") })
+  local width = (ctx and ctx.available_width) or self:get_width()
+  local lines = wrap_text(text, width)
+  return make_box(lines)
 end
 
 function Renderer:render_input(node, ctx)
