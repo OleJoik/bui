@@ -10,7 +10,7 @@ local results = Signal.new({ "Type to search with ripgrep..." })
 local is_searching = Signal.new(false)
 local last_error = Signal.new("")
 
-local debounce_ms = 250
+local debounce_ms = 120
 local max_lines = 10
 local timer = vim.uv.new_timer()
 local request_id = 0
