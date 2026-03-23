@@ -7,8 +7,6 @@ local Button = core.Button
 local Checkbox = core.Checkbox
 local Column = core.Column
 local Row = core.Row
-local Renderer = core.Renderer
-local live_signal_editor = core.live_signal_editor
 
 local first_name = Signal.new("Ada")
 local last_name = Signal.new("Lovelace")
@@ -95,7 +93,9 @@ local function App()
         value = function()
           return first_name:get()
         end,
-        on_edit = live_signal_editor("First name", first_name),
+        on_changed = function(next_value)
+          first_name:set(next_value)
+        end,
       }),
       Input({
         label = "Last name",
@@ -104,7 +104,9 @@ local function App()
         value = function()
           return last_name:get()
         end,
-        on_edit = live_signal_editor("Last name", last_name),
+        on_changed = function(next_value)
+          last_name:set(next_value)
+        end,
       }),
     }, { gap = element_gap }),
 
@@ -116,7 +118,12 @@ local function App()
         value = function()
           return email:get()
         end,
-        on_edit = live_signal_editor("Email", email),
+        on_changed = function(next_value, ctx)
+          email:set(next_value)
+          if ctx.phase == "submit" then
+            status:set("Email updated via on_changed handler.")
+          end
+        end,
         on_keymap = {
           ["gr"] = function(_, item)
             status:set("Custom input keymap `gr` fired on " .. item.label .. ".")
@@ -131,7 +138,9 @@ local function App()
           value = function()
             return city:get()
           end,
-          on_edit = live_signal_editor("City", city),
+          on_changed = function(next_value)
+            city:set(next_value)
+          end,
         }),
         Input({
           label = "Company",
@@ -140,7 +149,9 @@ local function App()
           value = function()
             return company:get()
           end,
-          on_edit = live_signal_editor("Company", company),
+          on_changed = function(next_value)
+            company:set(next_value)
+          end,
         }),
       }, {
         gap = element_gap,
@@ -163,40 +174,4 @@ local function App()
   }, { gap = element_gap })
 end
 
-local function mount()
-  core.setup_highlights()
-
-  local buf = vim.api.nvim_create_buf(false, true)
-  local win = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(win, buf)
-
-  vim.bo[buf].buftype = "nofile"
-  vim.bo[buf].bufhidden = "wipe"
-  vim.bo[buf].swapfile = false
-  vim.bo[buf].modifiable = false
-  vim.bo[buf].filetype = "mini_react_ui"
-
-  vim.wo[win].number = false
-  vim.wo[win].relativenumber = false
-  vim.wo[win].wrap = false
-  vim.wo[win].signcolumn = "no"
-  vim.wo[win].cursorline = false
-
-  local renderer = Renderer.new(buf, win, 80)
-  local runtime = core.create_runtime(renderer, App)
-  core.setup_default_keymaps(buf, runtime)
-
-  vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
-    callback = function()
-      if
-        vim.api.nvim_buf_is_valid(buf)
-        and vim.api.nvim_win_is_valid(win)
-        and vim.api.nvim_win_get_buf(win) == buf
-      then
-        runtime:render()
-      end
-    end,
-  })
-end
-
-mount()
+core.mount(App)

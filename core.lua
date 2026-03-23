@@ -1,6 +1,8 @@
 local current_effect = nil
 
 local M = {}
+local make_input_editor
+local setup_highlights
 
 -- ============================================================
 -- Reactive core
@@ -420,7 +422,7 @@ function Renderer:render_input(node, ctx)
   local focusables = {
     {
       focused = focused,
-      on_edit = props.on_edit,
+      on_edit = props.on_edit or make_input_editor(props, label, value),
       on_keymap = props.on_keymap,
       label = label,
       width = width,
@@ -1340,9 +1342,24 @@ local function open_live_input(opts)
   }
 end
 
-local function live_signal_editor(label, signal)
+make_input_editor = function(props, label, initial_value)
+  props = props or {}
+  local on_changed = props.on_changed
+
+  if type(on_changed) ~= "function" then
+    return nil
+  end
+
   return function(parent_win, item, on_done)
-    local original = signal:get()
+    local original = tostring(initial_value or "")
+
+    local function apply(value, phase)
+      on_changed(value, {
+        phase = phase,
+        item = item,
+        parent_win = parent_win,
+      })
+    end
 
     open_live_input({
       title = label,
@@ -1350,13 +1367,13 @@ local function live_signal_editor(label, signal)
       parent_win = parent_win,
       anchor_item = item,
       on_change = function(v)
-        signal:set(v)
+        apply(v, "change")
       end,
       on_submit = function(v)
-        signal:set(v)
+        apply(v, "submit")
       end,
       on_cancel = function()
-        signal:set(original)
+        apply(original, "cancel")
       end,
       on_close = function()
         if on_done then
@@ -1367,9 +1384,69 @@ local function live_signal_editor(label, signal)
   end
 end
 
-M.live_signal_editor = live_signal_editor
+local function mount(app_fn, opts)
+  opts = opts or {}
 
-local function setup_highlights()
+  setup_highlights()
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  local win = opts.win or vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(win, buf)
+
+  local default_buf_options = {
+    buftype = "nofile",
+    bufhidden = "wipe",
+    swapfile = false,
+    modifiable = false,
+    filetype = "mini_react_ui",
+  }
+
+  local default_win_options = {
+    number = false,
+    relativenumber = false,
+    wrap = false,
+    signcolumn = "no",
+    cursorline = false,
+  }
+
+  local buf_options = vim.tbl_extend("force", default_buf_options, opts.buf_options or {})
+  local win_options = vim.tbl_extend("force", default_win_options, opts.win_options or {})
+
+  for name, value in pairs(buf_options) do
+    vim.bo[buf][name] = value
+  end
+
+  for name, value in pairs(win_options) do
+    vim.wo[win][name] = value
+  end
+
+  local renderer = Renderer.new(buf, win, opts.width or 80)
+  local runtime = create_runtime(renderer, app_fn)
+  setup_default_keymaps(buf, runtime)
+
+  vim.api.nvim_create_autocmd(opts.resize_events or { "VimResized", "WinResized" }, {
+    callback = function()
+      if
+        vim.api.nvim_buf_is_valid(buf)
+        and vim.api.nvim_win_is_valid(win)
+        and vim.api.nvim_win_get_buf(win) == buf
+      then
+        runtime:render()
+      end
+    end,
+  })
+
+  return {
+    bufnr = buf,
+    winid = win,
+    renderer = renderer,
+    runtime = runtime,
+  }
+end
+
+M.mount = mount
+
+setup_highlights = function()
   vim.api.nvim_set_hl(0, "MiniReactInput", {
     fg = "#c0caf5",
   })
